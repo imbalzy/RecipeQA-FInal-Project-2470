@@ -33,6 +33,26 @@ def read_file(file_name):
   return textual_cloze, visual_cloze, visual_coherence, visual_ordering
 
 def delete_keys(dataset):
+  match = re.compile('[^A-Za-z]')
+  s = ""
+  if not dataset[0]["task"]=="textual_cloze":
+    for data in dataset:
+      for step in data['context']:
+        step['title'] = re.sub(match,' ', step['title']).lower()
+        step['body'] = re.sub(match,' ', step['body']).lower()
+        s += step['title']+ step['body']
+  else:
+    for data in dataset:
+      for step in data['context']:
+        step['body'] = re.sub(match,' ', step['body']).lower()
+        s += step['body']
+      for i in range(len(data['choice_list'])):
+        data['choice_list'][i] = re.sub(match,' ', data['choice_list'][i]).lower()
+        s += data['choice_list'][i]
+      for i in range(len(data['question'])):
+        data['question'][i] = re.sub(match,' ', data['question'][i]).lower()
+        s += data['question'][i]
+
   if (dataset[0]["task"]=="visual_coherence"):
     [data.pop("question") for data in dataset]
   if (dataset[0]["task"]=="visual_ordering"):
@@ -44,6 +64,8 @@ def delete_keys(dataset):
       data["choice_list"]=[[img2ind[img] for img in choice] for choice in data["choice_list"]]
   [[data.pop(key,None) for key in ["context_modality", "split", "qid", "question_modality", "task", "question_text"]] for data in dataset]
   [[[step.pop(key) for key in ["id","videos"]] for step in data['context']] for data in dataset]
+
+  return set(s.split())
 #  print(json.dumps(dataset[0], indent=4))
 
 def load_image(file_path):
@@ -52,7 +74,7 @@ def load_image(file_path):
 # Convert image to normalized float [0, 1]
   image = tf.image.convert_image_dtype(image,tf.float32)
 # resize image
-  image = tf.image.resize(image, [256,256])
+  image = tf.image.resize(image, [224,224])
 # Rescale data to range (-1, 1)
   image = (image - 0.5) * 2
   return image
@@ -80,28 +102,94 @@ def data_iter(batch_size, dataset, task, split):
         for k,v in X["image_list"].items():
           X["image_list"][k] = load_image("data/images/images-qa/"+split+"/images-qa/"+X["image_list"][k])
     yield Xs, Ys
-
-def preprocess(batch_size, split):
+    
+def get_vocab(split):
   textual_cloze, visual_cloze, visual_coherence, visual_ordering=read_file("data/"+split+" recipeqa.json")
-  delete_keys(textual_cloze)
-  delete_keys(visual_cloze)
-  delete_keys(visual_coherence)
-  delete_keys(visual_ordering)
+  v1 = delete_keys(textual_cloze)
+  v2 = delete_keys(visual_cloze)
+  v3 = delete_keys(visual_coherence)
+  v4 = delete_keys(visual_ordering)
+  return textual_cloze, visual_cloze, visual_coherence, visual_ordering, v1.union(v2,v3,v4)
+
+def load_embeddings(path_to_glove_file = 'glove.6B.100d.txt'):
+  embedding_index = {}
+  with open(path_to_glove_file) as f:
+    for line in f:
+      word, coefs = line.split(maxsplit=1)
+      coefs = np.fromstring(coefs, "f", sep=" ")
+      embedding_index[word] = coefs
+  return embedding_index
+
+def tokenize(textual_cloze, visual_cloze, visual_coherence, visual_ordering, word_index):
+  for dataset in (visual_cloze, visual_coherence, visual_ordering):
+    for data in dataset:
+      for step in data['context']:
+        step['title'] = [word_index[item] if item in word_index.keys() else 0 for item in step['title'].split()]
+        step['body'] = [word_index[item] if item in word_index.keys() else 0 for item in step['body'].split()]
+  for data in textual_cloze:
+    for step in data['context']:
+      step['body'] = [word_index[item] if item in word_index.keys() else 0 for item in step['body'].split()]
+    for i in range(len(data['choice_list'])):
+      data['choice_list'][i] = [word_index[item] if item in word_index.keys() else 0 for item in data['choice_list'][i].split()]
+    for i in range(len(data['question'])):
+      if not data['question'][i]==" placeholder":
+        data['question'][i] = [word_index[item] if item in word_index.keys() else 0 for item in data['question'][i].split()]
+      else:
+        data['question'][i] = "@placeholder"
+ 
+def get_iterator(textual_cloze, visual_cloze, visual_coherence, visual_ordering, batch_size, split):
   textual_cloze_iter = data_iter(batch_size, textual_cloze, "textual_cloze", split)
   visual_cloze_iter = data_iter(batch_size, visual_cloze, "visual_cloze", split)
   visual_coherence_iter = data_iter(batch_size, visual_coherence, "visual_coherence", split)
   visual_ordering_iter = data_iter(batch_size, visual_ordering, "visual_ordering", split)
   return textual_cloze_iter, visual_cloze_iter, visual_coherence_iter, visual_ordering_iter
 
-# Usage example:
-"""
-batch_size = 50
-train_it1, train_it2, train_it3, train_it4 = preprocess(batch_size, "train")
-test_it1, test_it2, test_it3, test_it4 = preprocess(batch_size, "test")
-val_it1, val_it2, val_it3, val_it4 = preprocess(batch_size, "val")
+def preprocess(batch_size=50):
+  train1, train2, train3, train4, vtrain = get_vocab( "train")
+  test1, test2, test3, test4,vtest = get_vocab("test")
+  val1, val2, val3, val4, vval = get_vocab("val")
+  vocab = list(vtrain.union(vtest, vval))
+  embedding_index = load_embeddings()
+  vocab = [item for item in vocab if item in embedding_index.keys()]
+  vocab += ["*PAD*", "*UNK*"]
+  vocab.reverse()
+  word_index = {w:i for i,w in enumerate(vocab)}
+  tokenize(train1, train2, train3, train4, word_index)
+  tokenize(test1, test2, test3, test4, word_index)
+  tokenize(val1, val2, val3, val4, word_index)
+  train_iter1, train_iter2, train_iter3, train_iter4 = get_iterator(train1, train2, train3, train4, batch_size, "train")
+  test_iter1, test_iter2, test_iter3, test_iter4 = get_iterator(test1, test2, test3, test4, batch_size, "test")
+  val_iter1, val_iter2, val_iter3, val_iter4 = get_iterator(val1, val2, val3, val4, batch_size, "val")
+  return (train_iter1, train_iter2, train_iter3, train_iter4), (test_iter1, test_iter2, test_iter3, test_iter4), (val_iter1, val_iter2, val_iter3, val_iter4), embedding_index, word_index
 
-for Xs, Ys in val_it2:
-  print(json.dumps(Xs[0], indent=4, default=lambda x:"tf_tensor"))
-  print(Ys[0])
-  break
-"""
+def get_embedding_layer(word_index, embeddings_index, embedding_dim = 100):
+  num_tokens = len(word_index)
+  embedding_matrix = np.zeros((num_tokens, embedding_dim))
+  for word, i in word_index.items():
+    if i<=1:
+      continue
+    embedding_matrix[i] = embeddings_index[word]
+  embedding_layer = tf.keras.layers.Embedding(
+    num_tokens,
+    embedding_dim,
+    embeddings_initializer=tf.keras.initializers.Constant(embedding_matrix),
+    trainable=False,
+  )
+  return embedding_layer
+
+def main():
+  batch_size = 50
+  (train_iter1, train_iter2, train_iter3, train_iter4), (test_iter1, test_iter2, test_iter3, test_iter4), (val_iter1, val_iter2, val_iter3, val_iter4), embedding_index, word_index = preprocess(batch_size)
+  # Usage:
+  for Xs, Ys in val_iter1:
+    print(json.dumps(Xs[0], indent=4, default=lambda x:"tf_tensor"))
+    print(Ys[0])
+    break
+  print(len(word_index))
+  print(list(word_index.keys())[:10])
+  l_embed = get_embedding_layer(word_index, embedding_index)
+  l_embed(tf.convert_to_tensor([[2]]))
+  print(l_embed.get_weights()[0])
+
+if __name__ == '__main__':
+  main()
