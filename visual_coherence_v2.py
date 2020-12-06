@@ -113,5 +113,5 @@ def test(model, iter):
     
 model = Model(l_embed)
 train(model, train_iter3)
-test(model, train_iter3)
+test(model, test_iter3)
 
