@@ -17,6 +17,9 @@ os.environ['KAGGLE_CONFIG_DIR'] = "/content"
 
 !kaggle datasets download -d jeromeblanchet/recipeqa-nlp-dataset
 !unzip recipeqa-nlp-dataset.zip -d data/ > /dev/null
+
+!wget http://nlp.stanford.edu/data/glove.6B.zip
+!unzip -q glove.6B.zip
 """
 
 import json
