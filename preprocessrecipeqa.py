@@ -97,7 +97,7 @@ def data_iter(batch_size, dataset, task, split):
     if task=="visual_cloze":
       for X in Xs:
         X["choice_list"] = [load_image("data/images/images-qa/"+split+"/images-qa/"+item) for item in X["choice_list"]]
-        X["question"] = [load_image("data/images/images-qa/"+split+"/images-qa/"+item) if not item=="@placeholder" else "@placeholder"  for item in X["question"]]
+        X["question"] = [load_image("data/images/images-qa/"+split+"/images-qa/"+item) if not item=="@placeholder" else tf.zeros([224,224,3])  for item in X["question"]]
     if task=="visual_coherence":
       for X in Xs:
         X["choice_list"] = [load_image("data/images/images-qa/"+split+"/images-qa/"+item) for item in X["choice_list"]]
