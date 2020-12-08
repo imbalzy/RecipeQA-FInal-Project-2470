@@ -90,7 +90,7 @@ class Model(tf.keras.Model):
   def loss(self, logits, labels):
     return tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels, logits))
     
-batch_size = 1
+batch_size = 10
 (train_iter1, train_iter2, train_iter3, train_iter4), (test_iter1, test_iter2, test_iter3, test_iter4), (val_iter1, val_iter2, val_iter3, val_iter4), embedding_index, word_index = preprocess(batch_size)
 l_embed = get_embedding_layer(word_index, embedding_index)
 
