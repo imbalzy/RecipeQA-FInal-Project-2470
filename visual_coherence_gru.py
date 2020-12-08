@@ -20,21 +20,25 @@ class Model(tf.keras.Model):
     self.class_dense1 = tf.keras.layers.Dense(units = 100, activation = "relu")
     self.class_dense2 = tf.keras.layers.Dense(units = 4)
     self.optimizer = tf.keras.optimizers.Adam(1e-3)
-    self.gru = tf.keras.layers.GRU(100,return_state=True,return_sequences=True)
+    self.gru1 = tf.keras.layers.GRU(100,return_state=True,return_sequences=True)
+    self.gru2 = tf.keras.layers.GRU(100,return_state=True,return_sequences=True)
 
   def call(self, Xs):
     textlist = []
     choicelist = []
-
     for recipe in Xs:
-      text = []
+      text2 = []
       for step in recipe['context']:
+        text = []
         text += step['body']
-      _,text = self.gru(tf.expand_dims(self.word_embedding(tf.convert_to_tensor(text)),axis=0), None)
-      textlist.append(text[0])
+        if not len(text):
+          continue
+        _, text = self.gru1(tf.expand_dims(self.word_embedding(tf.convert_to_tensor(text)),axis=0), None)
+        text2.append(text[0])
+      _,text2 = self.gru2(tf.expand_dims(tf.convert_to_tensor(text2),axis=0), None)
+      textlist.append(text2[0])
       choicelist.append(recipe['choice_list'])
     textlist = tf.convert_to_tensor(textlist)
-    
     choice_image = tf.convert_to_tensor(choicelist)
 
     choice_token = self.image_conv1(choice_image[:,0])
