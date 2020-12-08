@@ -8,17 +8,17 @@ class Model(tf.keras.Model):
     self.image_conv1 = tf.keras.layers.Conv2D(filters = 4, kernel_size = 3, strides=(2, 2), padding='valid')
     self.image_conv2 = tf.keras.layers.Conv2D(filters = 8, kernel_size = 3, strides=(2, 2), padding='valid')
     self.image_conv3 = tf.keras.layers.Conv2D(filters = 16, kernel_size = 3, strides=(2, 2), padding='valid')
-    self.image_dense = tf.keras.layers.Dense(units = 100)
+    self.image_dense = tf.keras.layers.Dense(units = 100, activation = "relu")
 
     self.word_embedding = l_embed
-    self.text_dense = tf.keras.layers.Dense(units = 100)
+    self.text_dense1 = tf.keras.layers.Dense(units = 100, activation = "relu")
+    self.text_dense2 = tf.keras.layers.Dense(units = 100, activation = "relu")
 
-    self.text_image_embedding1 = tf.keras.layers.Dense(units = 200, activation = "relu")
-    self.text_image_embedding2 = tf.keras.layers.Dense(units = 100)
+    self.text_image_embedding1 = tf.keras.layers.Dense(units = 100, activation = "relu")
+    self.text_image_embedding2 = tf.keras.layers.Dense(units = 100, activation = "relu")
 
-    self.class_dense1 = tf.keras.layers.Dense(units = 50, activation = "relu")
-    self.class_dense2 = tf.keras.layers.Dense(units = 20, activation = "relu")
-    self.class_dense3 = tf.keras.layers.Dense(units = 4)
+    self.class_dense1 = tf.keras.layers.Dense(units = 100, activation = "relu")
+    self.class_dense2 = tf.keras.layers.Dense(units = 4)
     self.optimizer = tf.keras.optimizers.Adam(1e-4)
 
   def call(self, Xs):
@@ -28,7 +28,7 @@ class Model(tf.keras.Model):
       text = []
       for step in recipe['context']:
         text += step['body']
-      text = tf.reduce_mean([l_embed(tf.convert_to_tensor(item)) for item in text],axis=0)
+      text = tf.reduce_mean(self.word_embedding(tf.convert_to_tensor(text)),axis=0)
       textlist.append(text)
       choicelist.append(recipe['choice_list'])
     textlist = tf.convert_to_tensor(textlist)
@@ -56,7 +56,7 @@ class Model(tf.keras.Model):
 
     #query word embedding
 
-    text_embedding = self.text_dense(textlist)
+    text_embedding = self.text_dense2(self.text_dense1(textlist))
 
     #create image_word embedding for choice 0
     token = tf.concat([choice0_embedding, text_embedding],axis=-1)
@@ -80,15 +80,14 @@ class Model(tf.keras.Model):
 
     token = tf.concat([choice0_embedding, choice1_embedding, choice2_embedding, choice3_embedding],axis=-1)
     token = self.class_dense1(token)
-    token = self.class_dense2(token)
-    logit = self.class_dense3(token)
+    logit = self.class_dense2(token)
 
     return logit
     
   def loss(self, logits, labels):
     return tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels, logits))
     
-batch_size = 3
+batch_size = 10
 (train_iter1, train_iter2, train_iter3, train_iter4), (test_iter1, test_iter2, test_iter3, test_iter4), (val_iter1, val_iter2, val_iter3, val_iter4), embedding_index, word_index = preprocess(batch_size)
 l_embed = get_embedding_layer(word_index, embedding_index)
 
